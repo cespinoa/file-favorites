@@ -34,7 +34,8 @@ bash "$SCRIPT_DIR/core/uninstall.sh"
 
 # Configuración de usuario (requiere --purge)
 if [ "$PURGE" = true ]; then
-    CONFIG="$HOME/.config/favorites"
+    REAL_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
+    CONFIG="$REAL_HOME/.config/favorites"
     if [ -d "$CONFIG" ]; then
         rm -rf "$CONFIG"
         echo "✓ Configuración de usuario eliminada ($CONFIG)"

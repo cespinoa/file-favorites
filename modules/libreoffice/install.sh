@@ -14,7 +14,11 @@ if [ ! -f favorites-libreoffice.oxt ]; then
     bash build.sh
 fi
 
-unopkg add --shared --force favorites-libreoffice.oxt
+unopkg remove --shared org.favorites.libreoffice 2>/dev/null || true
+if ! unopkg add --shared favorites-libreoffice.oxt 2>/dev/null; then
+    echo "✗ Error al instalar la extensión" >&2
+    exit 1
+fi
 
 echo "✓ Extensión instalada"
 echo "  Reinicia LibreOffice para que el menú aparezca."
