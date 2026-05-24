@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import subprocess
+import configparser
+
+CONFIG_FILE = os.path.expanduser("~/.config/favorites/config.ini")
+
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        run_setup()
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    return {"folder": config["favorites"]["folder"]}
+
+
+def save_config(folder):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    config = configparser.ConfigParser()
+    config["favorites"] = {"folder": folder}
+    with open(CONFIG_FILE, "w") as f:
+        config.write(f)
+
+
+def run_folder_dialog():
+    try:
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk, GLib, Gio
+    except Exception as e:
+        print(f"GTK4 no disponible: {e}", file=sys.stderr)
+        return None
+
+    app = Gtk.Application(application_id="org.favorites.setup")
+    chosen_path = [None]
+
+    def on_activate(app):
+        dialog = Gtk.FileChooserDialog(
+            title="Carpeta de Favoritos",
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        )
+        dialog.set_application(app)
+        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Seleccionar", Gtk.ResponseType.ACCEPT)
+        dialog.set_current_folder(Gio.File.new_for_path(GLib.get_home_dir()))
+        dialog.set_current_name("Favoritos")
+
+        def on_response(dialog, response):
+            if response == Gtk.ResponseType.ACCEPT:
+                chosen_path[0] = dialog.get_file().get_path()
+            dialog.destroy()
+            app.quit()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+
+    app.connect("activate", on_activate)
+    app.run([])
+    return chosen_path[0]
+
+
+def setup_gnome_integration(folder_path):
+    subprocess.run(
+        ["gio", "set", folder_path, "metadata::custom-icon-name", "starred"],
+        check=False,
+    )
+
+    bookmarks_file = os.path.expanduser("~/.config/gtk-3.0/bookmarks")
+    entry = f"file://{folder_path} ⭐ Favoritos\n"
+
+    lines = []
+    if os.path.exists(bookmarks_file):
+        with open(bookmarks_file) as f:
+            lines = f.readlines()
+
+    lines = [l for l in lines if folder_path not in l]
+    lines.insert(0, entry)
+
+    os.makedirs(os.path.dirname(bookmarks_file), exist_ok=True)
+    with open(bookmarks_file, "w") as f:
+        f.writelines(lines)
+
+
+def run_setup():
+    folder = run_folder_dialog()
+    if folder is None:
+        folder = os.path.expanduser("~/Favoritos")
+        print(f"Usando carpeta por defecto: {folder}")
+
+    save_config(folder)
+    os.makedirs(folder, exist_ok=True)
+    setup_gnome_integration(folder)
+    print(f"Carpeta de favoritos configurada: {folder}")
+
+
+def is_favorite(filepath, favorites_dir):
+    filepath = os.path.realpath(filepath)
+    if not os.path.isdir(favorites_dir):
+        return False
+    for entry in os.scandir(favorites_dir):
+        if entry.is_symlink() and os.path.realpath(entry.path) == filepath:
+            return True
+    return False
+
+
+def resolve_symlink_name(filepath, favorites_dir):
+    name = os.path.basename(filepath)
+    target = os.path.join(favorites_dir, name)
+
+    if not os.path.lexists(target):
+        return target
+
+    parent = os.path.basename(os.path.dirname(filepath))
+    stem, ext = os.path.splitext(name)
+    new_name = f"{stem} ({parent}){ext}"
+    target = os.path.join(favorites_dir, new_name)
+
+    if not os.path.lexists(target):
+        return target
+
+    counter = 2
+    while True:
+        new_name = f"{stem} ({parent} {counter}){ext}"
+        target = os.path.join(favorites_dir, new_name)
+        if not os.path.lexists(target):
+            return target
+        counter += 1
+
+
+def cmd_add(filepath, config):
+    favorites_dir = config["folder"]
+    filepath = os.path.abspath(filepath)
+
+    if not os.path.exists(filepath):
+        print(f"Error: no existe '{filepath}'", file=sys.stderr)
+        sys.exit(2)
+
+    if is_favorite(filepath, favorites_dir):
+        sys.exit(0)  # stdout vacío = ya era favorito
+
+    os.makedirs(favorites_dir, exist_ok=True)
+    target = resolve_symlink_name(filepath, favorites_dir)
+    os.symlink(filepath, target)
+    print(os.path.basename(target))
+
+
+def cmd_check(filepath, config):
+    favorites_dir = config["folder"]
+    filepath = os.path.abspath(filepath)
+    sys.exit(0 if is_favorite(filepath, favorites_dir) else 1)
+
+
+def cmd_list(config):
+    favorites_dir = config["folder"]
+    if not os.path.isdir(favorites_dir):
+        sys.exit(0)
+    for entry in sorted(os.scandir(favorites_dir), key=lambda e: e.name):
+        if entry.is_symlink():
+            print(os.path.realpath(entry.path))
+
+
+def cmd_config(config):
+    for key, value in config.items():
+        print(f"{key} = {value}")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Uso: favorites <add|check|list|config|setup> [ruta]", file=sys.stderr)
+        sys.exit(2)
+
+    cmd = sys.argv[1]
+
+    if cmd == "setup":
+        run_setup()
+        return
+
+    config = load_config()
+
+    if cmd == "add":
+        if len(sys.argv) < 3:
+            print("Uso: favorites add <ruta>", file=sys.stderr)
+            sys.exit(2)
+        cmd_add(sys.argv[2], config)
+    elif cmd == "check":
+        if len(sys.argv) < 3:
+            print("Uso: favorites check <ruta>", file=sys.stderr)
+            sys.exit(2)
+        cmd_check(sys.argv[2], config)
+    elif cmd == "list":
+        cmd_list(config)
+    elif cmd == "config":
+        cmd_config(config)
+    else:
+        print(f"Subcomando desconocido: {cmd}", file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

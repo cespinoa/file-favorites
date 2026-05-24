@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest
+    xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">
+  <manifest:file-entry
+      manifest:media-type="application/vnd.sun.star.configuration-data"
+      manifest:full-path="Addons.xcu"/>
+  <manifest:file-entry
+      manifest:media-type="application/vnd.sun.star.uno-component;type=Python"
+      manifest:full-path="python/favorites_lo.py"/>
+  <manifest:file-entry
+      manifest:media-type="image/png"
+      manifest:full-path="icons/favorites_16.png"/>
+  <manifest:file-entry
+      manifest:media-type="image/png"
+      manifest:full-path="icons/favorites_26.png"/>
+</manifest:manifest>
