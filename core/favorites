@@ -26,44 +26,25 @@ def save_config(folder):
 
 def run_folder_dialog():
     try:
-        import gi
-        gi.require_version("Gtk", "4.0")
-        from gi.repository import Gtk, GLib, Gio
-    except Exception as e:
-        print(f"GTK4 no disponible: {e}", file=sys.stderr)
-        return None
-
-    app = Gtk.Application(application_id="org.favorites.setup")
-    chosen_path = [None]
-
-    def on_activate(app):
-        dialog = Gtk.FileChooserDialog(
-            title="Carpeta de Favoritos",
-            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        result = subprocess.run(
+            [
+                "zenity", "--file-selection", "--directory",
+                "--title=Selecciona la carpeta de Favoritos",
+                f"--filename={os.path.expanduser('~')}/",
+            ],
+            capture_output=True,
+            text=True,
         )
-        dialog.set_application(app)
-        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Seleccionar", Gtk.ResponseType.ACCEPT)
-        dialog.set_current_folder(Gio.File.new_for_path(GLib.get_home_dir()))
-        dialog.set_current_name("Favoritos")
-
-        def on_response(dialog, response):
-            if response == Gtk.ResponseType.ACCEPT:
-                chosen_path[0] = dialog.get_file().get_path()
-            dialog.destroy()
-            app.quit()
-
-        dialog.connect("response", on_response)
-        dialog.present()
-
-    app.connect("activate", on_activate)
-    app.run([])
-    return chosen_path[0]
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return None
+    except FileNotFoundError:
+        return None
 
 
 def setup_gnome_integration(folder_path):
     subprocess.run(
-        ["gio", "set", folder_path, "metadata::custom-icon-name", "starred"],
+        ["gio", "set", "-t", "string", folder_path, "metadata::custom-icon-name", "starred"],
         check=False,
     )
 
@@ -140,7 +121,11 @@ def cmd_add(filepath, config):
     if is_favorite(filepath, favorites_dir):
         sys.exit(0)  # stdout vacío = ya era favorito
 
+    folder_existed = os.path.isdir(favorites_dir)
     os.makedirs(favorites_dir, exist_ok=True)
+    if not folder_existed:
+        setup_gnome_integration(favorites_dir)
+
     target = resolve_symlink_name(filepath, favorites_dir)
     os.symlink(filepath, target)
     print(os.path.basename(target))
