@@ -88,20 +88,21 @@ report (ProjectX 2).pdf
 ## Uninstall
 
 ```bash
-# Core
-sudo rm /usr/local/bin/favorites
+sudo ./uninstall.sh
+```
 
-# Nautilus module
-sudo rm /usr/share/nautilus-python/extensions/favorites_nautilus.py
+User configuration (`~/.config/favorites/`) is kept by default.
+To remove everything:
 
-# Nemo module
-sudo rm /usr/share/nemo-python/extensions/favorites_nemo.py
+```bash
+sudo ./uninstall.sh --purge
+```
 
-# LibreOffice module
-sudo unopkg remove --shared org.favorites.libreoffice
+Uninstall specific modules only:
 
-# User configuration (optional)
-rm -rf ~/.config/favorites/
+```bash
+sudo ./uninstall.sh --modules=nautilus
+sudo ./uninstall.sh --modules=nemo,libreoffice
 ```
 
 Broken symlinks (file moved or deleted) appear in red in the file manager — 
